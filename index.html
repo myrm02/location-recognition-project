@@ -42,7 +42,7 @@
             const output = await session.run(feeds);
             const outputTensor = output[session.outputNames[0]];
             const predictedIndex = argMax(outputTensor.data);
-            result.innerText = "Vous étiez à : " + classes[predictedIndex];
+            result.innerText = "Vous étiez à : " + classes[predictedIndex] + "quand vous avez pris cette photo.";
 
             loader.classList.add('hidden');
         }
