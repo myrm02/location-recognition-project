@@ -3,62 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <title>Votre localisation imagée</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <h2>Uploader une image pour localiser l'image</h2>
         <input type="file" id="imageInput" accept="image/*" class="file-input">
-        <button id="analyzeBtn" onclick="sendImage()">Localiser</button>
-
-        <div id="loader" class="loader hidden"></div>
+        <button id="analyzeBtn" onclick="runONNX()">Localiser</button>
+        <div id="loader" class="hidden">Chargement...</div>
         <p id="result"></p>
     </div>
 
     <script>
-        async function sendImage() {
+        const classes = ['plage', 'montagne', 'ville', 'campagne', 'foret'];
+
+        async function runONNX() {
             const input = document.getElementById('imageInput');
             const file = input.files[0];
-            const btn = document.getElementById('analyzeBtn');
-            const loader = document.getElementById('loader');
             const result = document.getElementById('result');
+            const loader = document.getElementById('loader');
 
-            result.innerText = "";
             if (!file) {
                 alert("Veuillez sélectionner une image.");
                 return;
             }
 
-            // Désactiver le bouton et afficher loader
-            btn.disabled = true;
-            btn.classList.add('loading');
             loader.classList.remove('hidden');
+            result.innerText = "";
 
-            try {
-                const formData = new FormData();
-                formData.append("file", file);
+            const imageBitmap = await createImageBitmap(file);
+            const tensor = await preprocess(imageBitmap);
 
-                const response = await fetch("http://localhost:8000/predict", {
-                    method: "POST",
-                    body: formData
-                });
+            // Charger le modèle ONNX
+            const session = await ort.InferenceSession.create('location_recognition.onnx');
+            const feeds = { [session.inputNames[0]]: tensor };
 
-                if (!response.ok) {
-                    throw new Error("Erreur serveur");
-                }
+            const output = await session.run(feeds);
+            const outputTensor = output[session.outputNames[0]];
+            const predictedIndex = argMax(outputTensor.data);
+            result.innerText = "Vous étiez à : " + classes[predictedIndex];
 
-                const data = await response.json();
-                result.innerText = "Vous étiez à : " + data.prediction + " quand vous avez pris cette photo.";
-            } catch (error) {
-                result.innerText = "Erreur : " + error.message;
-            } finally {
-                btn.disabled = false;
-                btn.classList.remove('loading');
-                loader.classList.add('hidden');
+            loader.classList.add('hidden');
+        }
+
+        function argMax(array) {
+            return array.indexOf(Math.max(...array));
+        }
+
+        async function preprocess(imageBitmap) {
+            const width = 32;
+            const height = 32;
+
+            // Convertir en ImageData via canvas
+            const canvas = new OffscreenCanvas(width, height);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imageBitmap, 0, 0, width, height);
+            const imageData = ctx.getImageData(0, 0, width, height);
+
+            const { data } = imageData;
+            const float32Data = new Float32Array(3 * width * height);
+
+            // Normalisation manuelle (comme PyTorch: [0,1] puis (x - 0.5)/0.5)
+            for (let i = 0; i < width * height; i++) {
+                const r = data[i * 4] / 255;
+                const g = data[i * 4 + 1] / 255;
+                const b = data[i * 4 + 2] / 255;
+
+                float32Data[i] = (r - 0.5) / 0.5;              // R
+                float32Data[i + width * height] = (g - 0.5) / 0.5;  // G
+                float32Data[i + 2 * width * height] = (b - 0.5) / 0.5;  // B
             }
+
+            return new ort.Tensor('float32', float32Data, [1, 3, height, width]);
         }
     </script>
 </body>
 </html>
-
-
