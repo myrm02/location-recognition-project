@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Votre localisation imagée</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Uploader une image pour localiser l'image</h2>
+        <input type="file" id="imageInput" accept="image/*" class="file-input">
+        <button id="analyzeBtn" onclick="sendImage()">Localiser</button>
+
+        <div id="loader" class="loader hidden"></div>
+        <p id="result"></p>
+    </div>
+
+    <script>
+        async function sendImage() {
+            const input = document.getElementById('imageInput');
+            const file = input.files[0];
+            const btn = document.getElementById('analyzeBtn');
+            const loader = document.getElementById('loader');
+            const result = document.getElementById('result');
+
+            result.innerText = "";
+            if (!file) {
+                alert("Veuillez sélectionner une image.");
+                return;
+            }
+
+            // Désactiver le bouton et afficher loader
+            btn.disabled = true;
+            btn.classList.add('loading');
+            loader.classList.remove('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+
+                const response = await fetch("http://localhost:8000/predict", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error("Erreur serveur");
+                }
+
+                const data = await response.json();
+                result.innerText = "Vous étiez à : " + data.prediction + " quand vous avez pris cette photo.";
+            } catch (error) {
+                result.innerText = "Erreur : " + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                loader.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
+
+
